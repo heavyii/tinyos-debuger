@@ -247,6 +247,7 @@ int main(int argc, char **argv) {
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	filters_init("/home/heavey/workspace/tinyos-gdb/stepfilters.txt");
+	atexit(filters_destroy);
 	argv[0] = "msp430-gdb";
 	if (gdb_start(argc, argv) < 0)
 		return -1;
@@ -255,6 +256,5 @@ int main(int argc, char **argv) {
 	signal(SIGPIPE, SIG_IGN);
 
 	process();
-
 	return 0;
 }

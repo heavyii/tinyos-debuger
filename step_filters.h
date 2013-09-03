@@ -11,6 +11,7 @@
 typedef enum step_filter_result {SF_NONE, SF_INTO, SF_OVER, SF_RETURN} stepfilter_t;
 
 int filters_init(char *pathname);
+void filters_destroy(void);
 stepfilter_t step_filter(char *file, char *func, int line);
 
 #endif /* STEP_FILTERS_H_ */

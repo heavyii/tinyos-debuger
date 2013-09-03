@@ -21,24 +21,6 @@ static struct stepfilter_list *sil; /* step into list */
 static struct stepfilter_list *sol; /* step over list */
 static struct stepfilter_list *srl; /* step return list */
 
-static int check_filter(struct stepfilter_list *head, char *file) {
-	struct list_node *item = &head->list;
-	struct list_node *p = NULL;
-	if(item == NULL)
-		return -1;
-
-	if (strstr(file, head->msg) != NULL)
-		return 0;
-	for(p = item->next; p != item; p = p->next) {
-		struct stepfilter_list *t = NULL;
-		t = (struct stepfilter_list *)p;
-		if (strstr(file, t->msg) != NULL)
-			return 0;
-	}
-
-	return -1;
-}
-
 static struct stepfilter_list *stepfilter_list_malloc(void) {
 	struct stepfilter_list *p = NULL;
 	p = (struct stepfilter_list *)malloc(sizeof(struct stepfilter_list));
@@ -56,6 +38,20 @@ static void stepfilter_list_free(struct stepfilter_list *p) {
 			free(p->msg);
 		free(p);
 	}
+}
+
+static void stepfilter_list_destroy(struct stepfilter_list **head) {
+	struct list_node *item = &(*head)->list;
+	struct list_node *p = NULL;
+	if(item == NULL)
+		return;
+
+	for(p = item->next; p != item; p = item->next) {
+		list_remove(p);
+		stepfilter_list_free((struct stepfilter_list *)p);
+	}
+	stepfilter_list_free((struct stepfilter_list *)item);
+	*head = NULL;
 }
 
 static void stepfiler_list_print_callback(struct list_node *item) {
@@ -147,6 +143,31 @@ int filters_init(char *pathname) {
 	stepfiler_list_print(srl);
 #endif
 	return 0;
+}
+
+void filters_destroy(void) {
+	stepfilter_list_destroy(&sil);
+	stepfilter_list_destroy(&sol);
+	stepfilter_list_destroy(&srl);
+}
+
+static int check_filter(struct stepfilter_list *head, char *file) {
+	struct list_node *item = NULL;
+	struct list_node *p = NULL;
+	if(head == NULL)
+		return -1;
+
+	item = &head->list;
+	if (strstr(file, head->msg) != NULL)
+		return 0;
+	for(p = item->next; p != item; p = p->next) {
+		struct stepfilter_list *t = NULL;
+		t = (struct stepfilter_list *)p;
+		if (strstr(file, t->msg) != NULL)
+			return 0;
+	}
+
+	return -1;
 }
 
 stepfilter_t step_filter(char *file, char *func, int line) {
