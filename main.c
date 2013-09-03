@@ -164,15 +164,12 @@ void handle_gdb_io(char *ibuf, char *obuf) {
 				stepfilter_t step_type = step_filter(frame.file, frame.func, frame.line);
 				switch (step_type) {
 				case SF_INTO:
-					fprintf(stderr, "step into\n");
 					snprintf(mi_cmd, sizeof(mi_cmd), "%d-exec-step\n", seqnum);
 					break;
 				case SF_OVER:
-					fprintf(stderr, "step over\n");
 					snprintf(mi_cmd, sizeof(mi_cmd), "%d-exec-next\n", seqnum);
 					break;
 				case SF_RETURN:
-					fprintf(stderr, "step return\n");
 					snprintf(mi_cmd, sizeof(mi_cmd), "%d-exec-finish\n", seqnum);
 					break;
 				case SF_NONE:
@@ -182,9 +179,11 @@ void handle_gdb_io(char *ibuf, char *obuf) {
 			}
 		}
 	}
-	if(strlen(mi_cmd) > 0)
+	if(strlen(mi_cmd) > 0) {
+		fprintf(stderr, "step_filter: %s", obuf);
+		fprintf(stderr, "step_filter: %s", mi_cmd);
 		gdb_send(mi_cmd, strlen(mi_cmd));
-	else
+	} else
 		printf("%s", obuf);
 }
 

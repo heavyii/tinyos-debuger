@@ -171,7 +171,6 @@ static int check_filter(struct stepfilter_list *head, char *file) {
 }
 
 stepfilter_t step_filter(char *file, char *func, int line) {
-	fprintf(stderr, "step_filter: %s, %s, %d\n", file, func, line);
 	if (check_filter(sil, file) == 0)
 		return SF_INTO;
 	else if (check_filter(sol, file) == 0)
