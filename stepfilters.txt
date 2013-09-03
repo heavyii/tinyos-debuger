@@ -1,0 +1,9 @@
+[step-into]
+tos/system/SchedulerBasicP.nc
+tos/system/TinySchedulerC.nc
+tos/chips/msp430/pins/HplMsp430InterruptP.nc
+[step-over]
+tos/chips/msp430/timer/Msp430TimerCommonP.nc
+[step-return]
+tos/
+tos/chips/msp430/McuSleepC.nc

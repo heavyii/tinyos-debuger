@@ -1,0 +1,5 @@
+*.o
+tinyos-debuger
+*~
+.cproject
+.project
