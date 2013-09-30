@@ -1,5 +1,6 @@
 *.o
 tinyos-debuger
 *~
+stepfilters.txt
 .cproject
 .project

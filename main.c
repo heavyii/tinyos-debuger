@@ -6,8 +6,11 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <netinet/in.h>
 #include "process_gdb.h"
 #include "step_filters.h"
+#include "socket.h"
+#include "tinyos_gdb_packet.h"
 
 #define GDB_IO_BUFFER_SIZE 4000
 
@@ -147,6 +150,33 @@ char *to_step_over_result(char *obuf) {
 	return obuf;
 }
 
+void change_gie(int on) {
+	char sp[12] = "";
+	char changevar[128] = "1-data-evaluate-expression $r2\n";
+	gdb_send(changevar, strlen(changevar));
+	int r = gdb_readline(gb.obuf, sizeof(gb.obuf));
+	if (r <= 0)
+		return;
+
+	if(!strstr(gb.obuf, "1^done,value="))
+		return;
+
+	if (get_str_value(gb.obuf, "value", sp, sizeof(sp)) != NULL) {
+		u_int16_t r2 = (u_int16_t)atoi(sp);
+		u_int16_t r2_dst = 0;
+		r2_dst = on > 0 ? (r2 | (1<<3)) : (r2 & (~(1<<3)));
+
+		if(r2 != r2_dst) {
+			snprintf(changevar, sizeof(changevar), "1-data-evaluate-expression $r2=0x%04x\n", r2_dst);
+			gdb_send(changevar, strlen(changevar));
+			gdb_readline(gb.obuf, sizeof(gb.obuf));
+			fprintf(stderr, "%s", changevar);
+		}
+	}
+
+
+}
+
 /*  *stopped,reason="end-stepping-range",frame={addr="0x00004048",func="main",
 	args=[],file="/opt/tinyos-2.1.2/tos/system/RealMainP.nc",
 	fullname="/opt/tinyos-2.1.2/tos/system/RealMainP.nc",line="73"},
@@ -183,12 +213,58 @@ void handle_gdb_io(char *ibuf, char *obuf) {
 		fprintf(stderr, "step_filter: %s", obuf);
 		fprintf(stderr, "step_filter: %s", mi_cmd);
 		gdb_send(mi_cmd, strlen(mi_cmd));
-	} else
+	} else {
 		printf("%s", obuf);
+	}
+}
+
+int serve_client(int server_fd) {
+	/* socket message */
+	struct client_args {
+		int sockfd;
+		struct sockaddr_in addr;
+	};
+	struct client_args client;
+	socklen_t client_addr_len;
+	bzero(&client, sizeof(client));
+	client_addr_len = sizeof(client.addr);
+	client.sockfd = accept(server_fd, (struct sockaddr *) &client.addr,
+					&client_addr_len);
+	if (client.sockfd > 0) {
+		struct packet pkt;
+		if(recv_packet_ret(client.sockfd, &pkt) == 0) {
+			if (pkt.type == REQU) {
+				int result = 0;
+				switch (pkt.comid) {
+				case GIE_ON:
+					change_gie(1);
+					result = 1;
+					break;
+				case GIE_OFF:
+					change_gie(0);
+					result = 1;
+					break;
+				default:
+					break;
+				}
+
+				pkt.type = INFO;
+				if(result)
+					strcpy(pkt.buffer, "done");
+				else
+					strcpy(pkt.buffer, "unknown command");
+				send_packet(client.sockfd, &pkt);
+			}
+		}
+		close(client.sockfd);
+	}
+	return 0;
 }
 
 static int process() {
 	int r;
+	int server_fd;
+	server_fd = socket_server(SERVER_PORT, 5, INADDR_LOOPBACK);
 
 	while (1) {
 		struct timeval timeout;
@@ -196,10 +272,11 @@ static int process() {
 		FD_ZERO(&input);
 		FD_SET(STDIN_FILENO, &input);
 		FD_SET(gdb_get_fdout(), &input);
-
+		if(server_fd > 0)
+			FD_SET(server_fd, &input);
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 500000;
-		r = select(gdb_get_fdout() + 1, &input, NULL, NULL, &timeout);
+		r = select(gdb_get_fdout() > server_fd ? gdb_get_fdout() + 1 : server_fd + 1, &input, NULL, NULL, &timeout);
 
 		// see if there was an error or actual data
 		if (r <= 0) {
@@ -224,6 +301,8 @@ static int process() {
 					continue;
 				}
 				break;
+			} else if (FD_ISSET(server_fd, &input)) {
+				serve_client(server_fd);
 			}
 		}
 
@@ -241,9 +320,34 @@ void sig_handler(int sig) {
 	}
 }
 
+int control_gie(int on) {
+	struct packet pkt;
+	int fd = socket_connect_dst("127.0.0.1", SERVER_PORT);
+	if(fd < 0)
+		return -1;
+
+	bzero(&pkt, sizeof(pkt));
+	pkt.type  = REQU;
+	pkt.comid = on ? GIE_ON : GIE_OFF;
+	send_packet(fd, &pkt);
+
+	alarm(3);
+	recv_packet(fd, &pkt);
+	if(pkt.type == DONE) {
+		if (!strcmp(pkt.buffer, "done"))
+			return 0;
+	}
+	return -1;
+}
+
 int main(int argc, char **argv) {
 	setvbuf(stderr, NULL, _IONBF, 0);
 	setvbuf(stdout, NULL, _IONBF, 0);
+
+	if (strcmp(argv[1], "--gieon") == 0)
+		return control_gie(1);
+	else if (strcmp(argv[1], "--gieoff") == 0)
+		return control_gie(0);
 
 	filters_init("/home/heavey/workspace/tinyos-gdb/stepfilters.txt");
 	atexit(filters_destroy);
